@@ -1,0 +1,11 @@
+# Core Frameworks
+pyzmq>=24.0.0
+numpy>=1.22.0
+opencv-python>=4.6.0.66
+
+# AI & Perception (Ensure CUDA-enabled PyTorch matching JetPack is pre-installed)
+transformers>=4.30.0
+easyocr>=1.7.0
+
+# Optional runtime tools
+tqdm>=4.64.0

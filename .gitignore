@@ -1,0 +1,22 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Caches and runtime sockets
+.cache/
+*.sock
+*.log
+
+# Redundant backup files
+jetson_node_backup_*.py
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE / OS metadata
+.vscode/
+.idea/
+.DS_Store
