@@ -11,11 +11,11 @@ import torch
 from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 import easyocr
 
-parser = argparse.ArgumentParser(description="Jetson Guidance Engine - Anchored KLT Tracker")
+parser = argparse.ArgumentParser(description="Rectile Guidance Engine - Anchored KLT Tracker")
 parser.add_argument("--video", type=str, default=None, help="Path to video file")
 args = parser.parse_args()
 
-print("[JETSON NODE] Initializing Anchored Optical-Flow Guidance Engine...")
+print("[RECTILE ENGINE] Initializing Anchored Optical-Flow Guidance Engine...")
 
 # ---------------------------------------------------------
 # 1. 1-Second Sliding Window FPS Meter
@@ -269,14 +269,14 @@ class AsyncJpegPool:
 # 5. CUDA Models and ZeroMQ Setup
 # ---------------------------------------------------------
 device = "cuda" if torch.cuda.is_available() else "cpu"
-print(f"[JETSON NODE] Hardware Device: {device}")
+print(f"[RECTILE ENGINE] Hardware Device: {device}")
 
-print("[JETSON NODE] Loading Grounding DINO...")
-model_id = "IDEA-Research/grounding-dino-tiny"
+print("[RECTILE ENGINE] Loading Grounding DINO...")
+model_id = "./weights"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-print("[JETSON NODE] Loading EasyOCR...")
+print("[RECTILE ENGINE] Loading EasyOCR...")
 ocr_reader = easyocr.Reader(['en'], gpu=(device == 'cuda'))
 
 context = zmq.Context()
@@ -551,7 +551,7 @@ threading.Thread(target=publisher_worker, daemon=True).start()
 # ---------------------------------------------------------
 # 8. Uninterrupted 60 FPS Capture Engine
 # ---------------------------------------------------------
-print("[JETSON NODE] Stream active on ZMQ Ports 5555/5556...")
+print("[RECTILE ENGINE] Stream active on ZMQ Ports 5555/5556...")
 frame_counter = 0
 
 while True:
@@ -638,7 +638,7 @@ while True:
         "box": tracker_box,
         "score": round(float(score), 2),
         "process_fps": round(float(process_fps), 1) if state == "TRACKING" else 0.0,
-        "message": f"Jetson Guidance Engine: {state}"
+        "message": f"Rectile Guidance Engine: {state}"
     }
 
     encoder_pool.submit(annotated, meta)
