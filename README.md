@@ -1,92 +1,26 @@
-# 🎯 Rectile: High-Speed UAV Guidance & Ground Station Dashboard
+# Rectile — UAV Target Acquisition & Optical-Flow Guidance
 
-An edge-optimized UAV visual target acquisition, terminal guidance, and optical tracking system. Designed for terminal dive guidance (up to 60 m/s), multi-target detection, and multi-spectral optic filtering over ZeroMQ.
+**Rectile** is a low-latency target acquisition and tracking system for **NVIDIA Jetson Orin**. It pairs on-demand multi-signal AI acquisition with continuous **60 FPS Pyramidal Lucas-Kanade (KLT) optical-flow tracking**, streaming live annotated video and telemetry over **ZeroMQ** to a PySide6/PyQt Ground Control Station.
 
-This repository includes the **Rectile Edge Node** (for NVIDIA Jetson) and the **Rectile Ground Station GUI** (a PyQt-based viewer and command dashboard).
+## Architecture
 
----
+- **Capture & Streaming (`VideoSource`, `AsyncJpegPool`):** 1080p @ 60 FPS GStreamer SHM / video / RTSP capture decoupled from AI inference.
+- **Hybrid Target Acquisition (`run_hybrid_search`):**
+  - *Moving Vehicles:* Sparse optical flow + affine RANSAC ego-motion cancellation (<15 ms) with vegetation filtering and HSV color verification.
+  - *General Objects:* CUDA **Grounding DINO** (`./weights`) with center-boresight and full-frame passes.
+  - *Single Characters:* Morphological Top-Hat filtering + **EasyOCR**.
+- **Core-Snapped FB-KLT Tracker (`AnchoredKLTTracker`):** Tightens initial boxes onto the target core, tracks via forward-backward KLT (`fb_err < 2.8 px`), and uses local template-matching rescue during motion blur.
 
-## ✨ System Features
+## Repository Layout
 
-### Core Tracking & Perception (Edge Node)
-* **2-Stage Adaptive Acquisition:** Fast boresight center-crop with automatic full-frame fallback for edge targets.
-* **Anchored KLT Tracking:** Pyramidal Lucas-Kanade optical flow locked to physical pixels, synchronized to camera frame IDs to eliminate drift during rapid pitch/dive maneuvers.
-* **Optic Filter Simulation:** White Hot, Black Hot, Ironbow, and Rainbow thermal colormaps applied dynamically.
+- `jetson_node.py` — Edge perception, hybrid acquisition & 60 FPS KLT tracking node
+- `tracker_nanosam.py` — Ground station launcher & ZMQ client
+- `uav_gui/` — PySide6 / PyQt operator dashboard
+- `weights/` & `models/` — Local model weights
 
-### Ground Station Dashboard (GUI)
-* **Dynamic Source Switching:** Instantly swap between ZMQ video feeds, local webcams (e.g., Camera 0, Camera 1), local MP4 files, and live RTSP network streams (e.g., `rtsp://{remote_ip}:8554/stream`).
-* **Intelligent MP4 Recording:** Dedicated capture to `recording_<timestamp>_<id>.mp4`. Features a bounded pending queue that prevents application crashes by safely skipping frames (and reporting them) if the video encoder overloads. 
-* **Paced FPS Processing:** Video file playback is automatically paced to the source's nominal FPS for realistic viewing, rather than decoding at maximum CPU speed. 
-* **Command History & Pinning:** Target prompts (e.g., "white car", "helipad") are saved locally. Right-click history chips to pin your most-used commands for instant deployment.
-* **Tactical UI:** Full object rectangles replaced with minimalist fixed-green corner brackets for a cleaner, unobstructed target view.
+## Usage & ZMQ Protocol
 
----
-
-## 📦 Dependencies & Requirements
-
-To run Rectile, ensure your environment meets the following requirements. 
-
-**Hardware:**
-* **Edge Node:** NVIDIA Jetson (Orin Nano/NX, Xavier NX, Nano) running JetPack 5.x/6.x.
-* **Ground Station:** Linux, Windows (WSL2), or macOS with a GUI environment.
-
-**Python Dependencies:**
-* `PySide6` / `PyQt` (For the Ground Station Dashboard)
-* `opencv-python` (For frame capture, encoding, and display)
-* `pyzmq` (For edge-to-ground telemetry and video streaming)
-* `transformers`, `torch` (For Grounding DINO / AI perception)
-* `pytest` (Optional: For running GUI test suites)
-
-*To install core requirements:*
-`pip3 install -r requirements.txt`
-
----
-
-## 🛠️ Installation & GUI Patching
-
-### 1. Standard Installation
-Clone the repository to your Jetson or Ground Station laptop:
-`git clone https://github.com/aryanshekhar-tech/Rectile.git`
-`cd Rectile`
-
-### 2. Applying GUI Updates (If utilizing a patch archive)
-If you have received a local `uav_gui` update patch, extract it outside the project folder (e.g., to `Downloads`) and apply it using the built-in update helper. This safely replaces the GUI without touching the AI models, ZMQ server, or C++ sources.
-
-`python3 apply_gui_update.py --target ~/Rectile`
-*Note: The helper automatically backs up your previous GUI in `~/Rectile/backups/gui_viewer_fix_<timestamp>/`.*
-
----
-
-## 🚀 Execution Guide
-
-### Launching the Ground Station (Laptop)
-
-Navigate to the Rectile directory and launch the dashboard.
-
-**Option A: Connect to Live Edge Node (Default ZMQ)**
-`python3 ~/Rectile/tracker_nanosam.py`
-*(Defaults to pulling video from `http://localhost:5000/video` if the Edge Node is running).*
-
-**Option B: Play Local Video Simulation**
-`python3 ~/Rectile/tracker_nanosam.py /path/to/flight_video.mp4`
-
-### Dashboard Configuration & Settings
-Click the **Settings (Gear)** icon in the GUI to configure:
-1. **Camera Sources:** Map `Camera 1` and `Camera 2` to local devices or network streams.
-2. **RTSP Setup:** Enter full RTSP URLs and assign a remote IP for instant network connections.
-3. **Save vs. Apply:** Click *Save* to store preferences, or *Apply* to immediately switch the live viewer source. *(Note: Input switching clears the current local analysis session).*
-
----
-
-## ⏪ Rollback & Verification
-
-**Running Tests:**
-To verify file decoding, recording boundaries, history persistence, and source switching on your local machine:
-`cd ~/Rectile`
-`python3 -m pytest -q`
-
-**Restoring a Backup GUI:**
-If a GUI patch causes issues, you can easily restore the automatically generated backup:
-`cd ~/Rectile`
-`mv uav_gui "uav_gui.disabled.$(date +%Y%m%d_%H%M%S)"`
-`cp -a "backups/YOUR_BACKUP_DIRECTORY/uav_gui" ./uav_gui`
+- **Run Edge Node:** `python3 jetson_node.py` (or `--source FVC_6_1080p.mp4`)
+- **Run Ground Station:** `python3 tracker_nanosam.py`
+- **Port 5555 (`PUB`):** Multipart `[JSON telemetry, JPEG frame]`
+- **Port 5556 (`SUB`):** JSON commands (`deploy`, `clear`, `optic`)
